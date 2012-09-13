@@ -422,6 +422,15 @@
 			// nothing to do
 		}
 	}
+
+	NSString *fontStretch = [[styles objectForKey:@"font-stretch"] lowercaseString];
+	if (fontStretch)
+	{
+		if ([fontStretch isEqualToString:@"condensed"])
+		{
+			fontDescriptor.condensedTrait = YES;
+		}
+	}
 	
 	NSString *fontWeight = [[styles objectForKey:@"font-weight"] lowercaseString];
 	if (fontWeight)
