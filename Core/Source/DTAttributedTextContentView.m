@@ -116,6 +116,8 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 		
 		_isTiling = YES;
 	}
+
+    self.maxHeight = 0;
 	
 	[self selfLock];
 }
@@ -277,7 +279,6 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 							if (existingAttachmentView)
 							{
 								existingAttachmentView.hidden = NO;
-								frameForSubview.origin.x += 50;
 								existingAttachmentView.frame = frameForSubview;
 								
 								existingAttachmentView.alpha = 1;
@@ -672,7 +673,7 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 				if (theLayouter)
 				{
 					CGRect rect = UIEdgeInsetsInsetRect(self.bounds, _edgeInsets);
-					rect.size.height = CGFLOAT_OPEN_HEIGHT; // necessary height set as soon as we know it.
+					rect.size.height = self.maxHeight ? self.maxHeight : CGFLOAT_OPEN_HEIGHT; // necessary height set as soon as we know it.
 					
 					_layoutFrame = [theLayouter layoutFrameWithRect:rect range:NSMakeRange(0, 0)];
 					

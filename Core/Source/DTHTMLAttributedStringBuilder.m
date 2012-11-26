@@ -77,10 +77,14 @@
 
 - (void)dealloc 
 {
-	dispatch_release(_stringAssemblyQueue);
-	dispatch_release(_stringAssemblyGroup);
-	dispatch_release(_stringParsingQueue);
-	dispatch_release(_stringParsingGroup);
+	#if TARGET_API_MAC_OSX
+		#if MAC_OS_X_VERSION_MIN_REQUIRED < 1080
+			dispatch_release(_stringAssemblyQueue);
+			dispatch_release(_stringAssemblyGroup);
+			dispatch_release(_stringParsingQueue);
+			dispatch_release(_stringParsingGroup);
+		#endif
+	#endif
 }
 
 - (BOOL)_buildString
@@ -938,12 +942,19 @@
 {
 	void (^tmpBlock)(void) = ^
 	{
+		// this brute-force inherits the nextTags attributes from the previous tag
 		DTHTMLElement *parent = currentTag;
 		DTHTMLElement *nextTag = [currentTag copy];
 		nextTag.tagName = elementName;
 		nextTag.textScale = textScale;
 		nextTag.attributes = attributeDict;
 		[parent addChild:nextTag];
+		
+		// only inherit background-color from inline elements
+		if (parent.displayStyle == DTHTMLElementDisplayStyleInline)
+		{
+			nextTag.backgroundColor = currentTag.backgroundColor;
+		}
 		
 		// apply style from merged style sheet
 		NSDictionary *mergedStyles = [_globalStyleSheet mergedStyleDictionaryForElement:nextTag];
