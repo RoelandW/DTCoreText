@@ -26,15 +26,18 @@
 	CGPoint _baselineOrigin;
 	
 	CGFloat _ascent;
-	CGFloat descent;
-	CGFloat leading;
-	CGFloat width;
-	CGFloat trailingWhitespaceWidth;
+	CGFloat _descent;
+	CGFloat _leading;
+	CGFloat _width;
+	CGFloat _trailingWhitespaceWidth;
 	
 	NSArray *_glyphRuns;
 
 	BOOL _didCalculateMetrics;
 	dispatch_queue_t _syncQueue;
+	
+	BOOL _writingDirectionIsRightToLeft;
+	BOOL _needsToDetectWritingDirection;
 }
 
 - (id)initWithLine:(CTLineRef)line
@@ -43,6 +46,9 @@
 	{
 		_line = line;
 		CFRetain(_line);
+		
+		// writing direction
+		_needsToDetectWritingDirection = YES;
 		
 		// get a global queue
 		_syncQueue = dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0);
@@ -170,7 +176,7 @@
 		tmpRect.size.width = glyphFrame.origin.x + glyphFrame.size.width - tmpRect.origin.x;
 	}
 	
-	CGFloat maxX = CGRectGetMaxX(self.frame) - trailingWhitespaceWidth;
+	CGFloat maxX = CGRectGetMaxX(self.frame) - _trailingWhitespaceWidth;
 	if (CGRectGetMaxX(tmpRect) > maxX)
 	{
 		tmpRect.size.width = maxX - tmpRect.origin.x;
@@ -271,8 +277,8 @@
 	dispatch_sync(_syncQueue, ^{
 		if (!_didCalculateMetrics)
 		{
-			width = (CGFloat)CTLineGetTypographicBounds(_line, &_ascent, &descent, &leading);
-			trailingWhitespaceWidth = (CGFloat)CTLineGetTrailingWhitespaceWidth(_line);
+			_width = (CGFloat)CTLineGetTypographicBounds(_line, &_ascent, &_descent, &_leading);
+			_trailingWhitespaceWidth = (CGFloat)CTLineGetTrailingWhitespaceWidth(_line);
 			
 			_didCalculateMetrics = YES;
 		}
@@ -365,7 +371,7 @@
 		[self _calculateMetrics];
 	}
 	
-	return CGRectMake(_baselineOrigin.x, _baselineOrigin.y - _ascent, width, _ascent + descent);
+	return CGRectMake(_baselineOrigin.x, _baselineOrigin.y - _ascent, _width, _ascent + _descent);
 }
 
 - (CGFloat)width
@@ -375,7 +381,7 @@
 		[self _calculateMetrics];
 	}
 	
-	return width;
+	return _width;
 }
 
 - (CGFloat)ascent
@@ -407,7 +413,7 @@
 		[self _calculateMetrics];
 	}
 	
-	return descent;
+	return _descent;
 }
 
 - (CGFloat)leading
@@ -417,7 +423,7 @@
 		[self _calculateMetrics];
 	}
 	
-	return leading;
+	return _leading;
 }
 
 - (CGFloat)trailingWhitespaceWidth
@@ -427,18 +433,39 @@
 		[self _calculateMetrics];
 	}
 	
-	return trailingWhitespaceWidth;
+	return _trailingWhitespaceWidth;
 }
 
+- (BOOL)writingDirectionIsRightToLeft
+{
+	if (_needsToDetectWritingDirection)
+	{
+		if ([self.glyphRuns count])
+		{
+			DTCoreTextGlyphRun *firstRun = [self.glyphRuns objectAtIndex:0];
+			
+			_writingDirectionIsRightToLeft = [firstRun writingDirectionIsRightToLeft];
+		}
+	}
+	
+	return _writingDirectionIsRightToLeft;
+}
+
+- (void)setWritingDirectionIsRightToLeft:(BOOL)writingDirectionIsRightToLeft
+{
+	_writingDirectionIsRightToLeft = writingDirectionIsRightToLeft;
+	_needsToDetectWritingDirection = NO;
+}
 
 @synthesize frame =_frame;
 @synthesize glyphRuns = _glyphRuns;
 
 @synthesize ascent = _ascent;
-@synthesize descent;
-@synthesize leading;
-@synthesize trailingWhitespaceWidth;
+@synthesize descent = _descent;
+@synthesize leading = _leading;
+@synthesize trailingWhitespaceWidth = _trailingWhitespaceWidth;
 
 @synthesize baselineOrigin = _baselineOrigin;
+@synthesize writingDirectionIsRightToLeft = _writingDirectionIsRightToLeft;
 
 @end

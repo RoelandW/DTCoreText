@@ -18,15 +18,15 @@ static BOOL _needsChineseFontCascadeFix = NO;
 
 @implementation DTCoreTextFontDescriptor
 {
-	NSString *fontFamily;
-	NSString *fontName;
+	NSString *_fontFamily;
+	NSString *_fontName;
 	
 	CGFloat _pointSize;
 	
 	CTFontSymbolicTraits _stylisticTraits;
 	CTFontStylisticClass _stylisticClass;
     
-	BOOL smallCapsFeature;
+	BOOL _smallCapsFeature;
 }
 
 + (void)initialize
@@ -172,57 +172,56 @@ static BOOL _needsChineseFontCascadeFix = NO;
 		if (cfStr)
 		{
 			self.fontFamily = CFBridgingRelease(cfStr);
-			//CFRelease(cfStr);
 		}
 	}
 	
 	return self;
 }
 
-
-
 - (NSString *)description
 {
 	NSMutableString *string = [NSMutableString string];
 	
-	[string appendFormat:@"<%@ ", [self class]];
+	[string appendFormat:@"<%@", [self class]];
 	
 	
 	if (self.fontName)
 	{
-		[string appendFormat:@"name:\'%@\' ", self.fontName];
+		[string appendFormat:@" name=\'%@\'", self.fontName];
 	}
 	
-	if (fontFamily)
+	if (_fontFamily)
 	{
-		[string appendFormat:@"family:\'%@\' ", fontFamily];
+		[string appendFormat:@" family=\'%@\'", _fontFamily];
 	}
+	
+	[string appendFormat:@" size:%.0f", _pointSize];
 	
 	NSMutableArray *tmpTraits = [NSMutableArray array];
 	
 	if (_stylisticTraits & kCTFontBoldTrait)
 	{
-		[tmpTraits addObject:@"bold"];
+		[tmpTraits addObject:@" bold"];
 	}
 	
 	if (_stylisticTraits & kCTFontItalicTrait)
 	{
-		[tmpTraits addObject:@"italic"];
+		[tmpTraits addObject:@" italic"];
 	}
 	
 	if (_stylisticTraits & kCTFontMonoSpaceTrait)
 	{
-		[tmpTraits addObject:@"monospace"];
+		[tmpTraits addObject:@" monospace"];
 	}
 	
 	if (_stylisticTraits & kCTFontCondensedTrait)
 	{
-		[tmpTraits addObject:@"condensed"];
+		[tmpTraits addObject:@" condensed"];
 	}
 	
 	if (_stylisticTraits & kCTFontExpandedTrait)
 	{
-		[tmpTraits addObject:@"expanded"];
+		[tmpTraits addObject:@" expanded"];
 	}
 	
 	if (_stylisticTraits & kCTFontVerticalTrait)
@@ -232,29 +231,19 @@ static BOOL _needsChineseFontCascadeFix = NO;
 	
 	if (_stylisticTraits & kCTFontUIOptimizedTrait)
 	{
-		[tmpTraits addObject:@"UI optimized"];
+		[tmpTraits addObject:@" UI optimized"];
 	}
 	
 	
 	if ([tmpTraits count])
 	{
-		[string appendString:@"attributes:"];
+		[string appendString:@" attributes="];
 		[string appendString:[tmpTraits componentsJoinedByString:@", "]];
 	}
 	
 	[string appendString:@">"];
 	
 	return string;
-}
-
-- (CTFontSymbolicTraits)symbolicTraits
-{
-	CTFontSymbolicTraits retValue = _stylisticTraits;
-	
-	// bundle in class
-	retValue |= _stylisticClass;
-	
-	return retValue;
 }
 
 - (NSDictionary *)fontAttributes
@@ -275,21 +264,21 @@ static BOOL _needsChineseFontCascadeFix = NO;
 		[tmpDict setObject:traitsDict forKey:(id)kCTFontTraitsAttribute];
 	}
 	
-	if (fontFamily)
+	if (_fontFamily)
 	{
-		[tmpDict setObject:fontFamily forKey:(id)kCTFontFamilyNameAttribute];
+		[tmpDict setObject:_fontFamily forKey:(id)kCTFontFamilyNameAttribute];
 	}
 	
-	if (fontName)
+	if (_fontName)
 	{
-		[tmpDict setObject:fontName forKey:(id)kCTFontNameAttribute];
+		[tmpDict setObject:_fontName forKey:(id)kCTFontNameAttribute];
 	}
 	
 	// we need size because that's what makes a font unique, for searching it's ignored anyway
 	[tmpDict setObject:[NSNumber numberWithFloat:_pointSize] forKey:(id)kCTFontSizeAttribute];
 	
 	
-	if (smallCapsFeature)
+	if (_smallCapsFeature)
 	{
 		NSNumber *typeNum = [NSNumber numberWithInteger:3];
 		NSNumber *selNum = [NSNumber numberWithInteger:3];
@@ -329,7 +318,7 @@ static BOOL _needsChineseFontCascadeFix = NO;
 
 - (BOOL)supportsNativeSmallCaps
 {
-	if ([DTCoreTextFontDescriptor smallCapsFontNameforFontFamily:fontFamily bold:self.boldTrait italic:self.italicTrait])
+	if ([DTCoreTextFontDescriptor smallCapsFontNameforFontFamily:_fontFamily bold:self.boldTrait italic:self.italicTrait])
 	{
 		return YES;
 	}
@@ -371,7 +360,10 @@ static BOOL _needsChineseFontCascadeFix = NO;
 		CFRelease(fontFeatures);
 	}
 	
-	CFRelease(tmpFont);
+	if (tmpFont)
+	{
+		CFRelease(tmpFont);
+	}
 	
 	return smallCapsSupported;
 }
@@ -413,24 +405,24 @@ static BOOL _needsChineseFontCascadeFix = NO;
 	NSString *overrideName = nil;
 	
 	// override fontName if a small caps or regular override is registered
-	if (fontFamily)
+	if (_fontFamily)
 	{
-		if (smallCapsFeature)
+		if (_smallCapsFeature)
 		{
-			overrideName = [DTCoreTextFontDescriptor smallCapsFontNameforFontFamily:fontFamily bold:self.boldTrait italic:self.italicTrait];
+			overrideName = [DTCoreTextFontDescriptor smallCapsFontNameforFontFamily:_fontFamily bold:self.boldTrait italic:self.italicTrait];
 		}
 		else
 		{
-			overrideName = [DTCoreTextFontDescriptor overrideFontNameforFontFamily:fontFamily bold:self.boldTrait italic:self.italicTrait];
+			overrideName = [DTCoreTextFontDescriptor overrideFontNameforFontFamily:_fontFamily bold:self.boldTrait italic:self.italicTrait];
 		}
 	}
 	
 	// if we use the chinese font cascade fix we cannot use fast method as it does not allow specifying the custom cascade list
 	BOOL useFastFontCreation = !(_needsChineseFontCascadeFix && !self.boldTrait);
 	
-	if (useFastFontCreation && (fontName || overrideName))
+	if (useFastFontCreation && (_fontName || overrideName))
 	{
-		NSString *usedName = overrideName?overrideName:fontName;
+		NSString *usedName = overrideName?overrideName:_fontName;
 		
 		matchingFont = CTFontCreateWithName((__bridge CFStringRef)usedName, _pointSize, NULL);
 	}
@@ -450,7 +442,7 @@ static BOOL _needsChineseFontCascadeFix = NO;
 		fontDesc = CTFontDescriptorCreateWithAttributes((__bridge CFDictionaryRef)attributes);
 		
 		// we need font family, font name or an overridden font name for fast font creation
-		if (fontFamily||fontName||overrideName)
+		if (_fontFamily||_fontName||overrideName)
 		{
 			// fast font creation
 			matchingFont = CTFontCreateWithFontDescriptor(fontDesc, _pointSize, NULL);
@@ -462,12 +454,12 @@ static BOOL _needsChineseFontCascadeFix = NO;
 			
 			NSMutableSet *set = [NSMutableSet setWithObject:(id)kCTFontTraitsAttribute];
 			
-			if (fontFamily)
+			if (_fontFamily)
 			{
 				[set addObject:(id)kCTFontFamilyNameAttribute];
 			}
 			
-			if (smallCapsFeature)
+			if (_smallCapsFeature)
 			{
 				[set addObject:(id)kCTFontFeaturesAttribute];
 			}
@@ -533,8 +525,8 @@ static BOOL _needsChineseFontCascadeFix = NO;
 	
 	calcHash = calcHash*31 + _pointSize;
 	calcHash = calcHash*31 + (_stylisticClass | _stylisticTraits);
-	calcHash = calcHash*31 + [fontName hash];
-	calcHash = calcHash*31 + [fontFamily hash];
+	calcHash = calcHash*31 + [_fontName hash];
+	calcHash = calcHash*31 + [_fontFamily hash];
 	
 	return calcHash;
 }
@@ -636,23 +628,27 @@ static BOOL _needsChineseFontCascadeFix = NO;
 	}
 }
 
-- (void)setSymbolicTraits:(CTFontSymbolicTraits)theSymbolicTraits
+- (CTFontSymbolicTraits)symbolicTraits
 {
-	_stylisticTraits = theSymbolicTraits;
-	
-	// stylistic class is bundled in the traits
-	_stylisticClass = theSymbolicTraits & kCTFontClassMaskTrait;   
+	// symbolic traits include both stylistic traits as well as stylistic class
+	return _stylisticTraits | _stylisticClass;
 }
 
+- (void)setSymbolicTraits:(CTFontSymbolicTraits)theSymbolicTraits
+{
+	// symbolic traits include both stylistic traits as well as stylistic class
+	_stylisticTraits = theSymbolicTraits & ~kCTFontClassMaskTrait;
+	_stylisticClass = theSymbolicTraits & kCTFontClassMaskTrait;
+}
 
 // a representation of this font in CSS style
 - (NSString *)cssStyleRepresentation
 {
 	NSMutableString *retString = [NSMutableString string];
 	
-	if (fontFamily)
+	if (_fontFamily)
 	{
-		[retString appendFormat:@"font-family:'%@';", fontFamily];
+		[retString appendFormat:@"font-family:'%@';", _fontFamily];
 	}
 	
 	[retString appendFormat:@"font-size:%.0fpx;", _pointSize];
@@ -802,14 +798,14 @@ static BOOL _needsChineseFontCascadeFix = NO;
 	_pointSize = roundf(pointSize);
 }
 
-@synthesize fontFamily;
-@synthesize fontName;
+@synthesize fontFamily = _fontFamily;
+@synthesize fontName = _fontName;
 @synthesize pointSize = _pointSize;
 
 @synthesize symbolicTraits;
 
-@synthesize stylisticClass;
-@synthesize smallCapsFeature;
+@synthesize stylisticClass = _stylisticClass;
+@synthesize smallCapsFeature = _smallCapsFeature;
 
 @end
 
