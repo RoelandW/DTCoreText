@@ -686,7 +686,7 @@ NSDictionary *_classesForNames = nil;
 	{
 		if ([fontStretch isEqualToString:@"condensed"])
 		{
-			fontDescriptor.condensedTrait = YES;
+			_fontDescriptor.condensedTrait = YES;
 		}
 	}
 	
