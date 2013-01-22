@@ -16,6 +16,9 @@
 - (NSDictionary *)dictionaryOfCSSStyles
 {
 	// font-size:14px;
+	if ([self length] == 0) {
+		return nil;
+	}
 	NSScanner *scanner = [NSScanner scannerWithString:self];
 	
 	NSString *name = nil;

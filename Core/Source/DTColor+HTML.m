@@ -224,8 +224,10 @@ static NSDictionary *colorLookup = nil;
 	});
 	
 	NSString *hexString = [colorLookup objectForKey:[name lowercaseString]];
-	
-	return [UIColor colorWithHexString:hexString];
+	if (hexString == nil) {
+		return nil;
+	}
+	return [self colorWithHexString:hexString];
 }
 
 - (NSString *)htmlHexString
