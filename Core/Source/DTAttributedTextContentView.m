@@ -20,7 +20,6 @@
 
 @interface DTAttributedTextContentView ()
 {
-	BOOL _drawDebugFrames;
 	BOOL _shouldDrawImages;
 	BOOL _shouldDrawLinks;
 	BOOL _shouldLayoutCustomSubviews;
@@ -95,6 +94,8 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 	// DTLinkButton set this property to NO and create a highlighted version of the attributed string
 	_shouldDrawLinks = YES;
 	
+	_flexibleHeight = YES;
+
 	// possibly already set in NIB
 	if (!self.backgroundColor)
 	{
@@ -153,8 +154,10 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 - (void)dealloc 
 {
 	[self removeAllCustomViews];
-	
+
+#if !OS_OBJECT_USE_OBJC
 	dispatch_release(selfLock);
+#endif
 }
 
 - (void)layoutSubviewsInRect:(CGRect)rect
@@ -472,8 +475,9 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 
 - (void)relayoutText
 {
-    // Make sure we actually have a superview before attempting to relayout the text.
-    if (self.superview) {
+    // Make sure we actually have a superview and a previous layout before attempting to relayout the text.
+    if (_layoutFrame && self.superview)
+	{
         // need new layouter
         self.layouter = nil;
         self.layoutFrame = nil;
@@ -557,17 +561,20 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 {
 	if (_attributedString != string)
 	{
-		
 		_attributedString = [string copy];
 		
-		// new layout invalidates all positions for custom views
-		[self removeAllCustomViews];
+		// only do relayout if there is a previous layout frame
+		if (_layoutFrame)
+		{
+			// new layout invalidates all positions for custom views
+			[self removeAllCustomViews];
 		
-		[self relayoutText];
+			[self relayoutText];
+		}
 	}
 }
 
-- (void)setFrame:(CGRect)frame //relayoutText:(BOOL)relayoutText
+- (void)setFrame:(CGRect)frame
 {
 	CGRect oldFrame = self.frame;
 	
@@ -577,29 +584,12 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 	{
 		return;	
 	}
-	
-	BOOL frameDidChange = !CGRectEqualToRect(oldFrame, frame);
-	
+
 	// having a layouter means we are responsible for layouting yourselves
-	if (frameDidChange)
+	// relayout only if frame size has been changed
+	if (!CGSizeEqualToSize(oldFrame.size, frame.size))
 	{
 		[self relayoutText];
-	}
-}
-
-//- (void)setFrame:(CGRect)frame
-//{
-//	// sizeToFit also calls this, but we want to be able to avoid relayouting
-//	[self setFrame:frame relayoutText:_relayoutTextOnFrameChange];
-//}
-
-- (void)setDrawDebugFrames:(BOOL)drawDebugFrames
-{
-	if (_drawDebugFrames != drawDebugFrames)
-	{
-		_drawDebugFrames = drawDebugFrames;
-		
-		[self setNeedsDisplay];
 	}
 }
 
@@ -673,8 +663,11 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 				if (theLayouter)
 				{
 					CGRect rect = UIEdgeInsetsInsetRect(self.bounds, _edgeInsets);
-					rect.size.height = self.maxHeight ? self.maxHeight : CGFLOAT_OPEN_HEIGHT; // necessary height set as soon as we know it.
-					
+					if (_flexibleHeight)
+					{
+						rect.size.height = (self.maxHeight ? self.maxHeight : CGFLOAT_OPEN_HEIGHT); // necessary height set as soon as we know it.
+					}
+
 					_layoutFrame = [theLayouter layoutFrameWithRect:rect range:NSMakeRange(0, 0)];
 					
 					if (_delegateFlags.delegateSupportsNotificationBeforeTextBoxDrawing)
@@ -793,7 +786,6 @@ static Class _layerClassToUseForDTAttributedTextContentView = nil;
 @synthesize attributedString = _attributedString;
 @synthesize delegate = _delegate;
 @synthesize edgeInsets = _edgeInsets;
-@synthesize drawDebugFrames = _drawDebugFrames;
 @synthesize shouldDrawImages = _shouldDrawImages;
 @synthesize shouldDrawLinks = _shouldDrawLinks;
 @synthesize shouldLayoutCustomSubviews = _shouldLayoutCustomSubviews;

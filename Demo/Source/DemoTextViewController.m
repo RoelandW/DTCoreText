@@ -10,6 +10,8 @@
 #import <QuartzCore/QuartzCore.h>
 #import <MediaPlayer/MediaPlayer.h>
 
+#import "DTVersion.h"
+
 @interface DemoTextViewController ()
 - (void)_segmentedControlChanged:(id)sender;
 
@@ -23,27 +25,46 @@
 
 
 @implementation DemoTextViewController
+{
+	NSString *_fileName;
+	
+	UISegmentedControl *_segmentedControl;
+	DTAttributedTextView *_textView;
+	UITextView *_rangeView;
+	UITextView *_charsView;
+	UITextView *_htmlView;
+	UITextView *_iOS6View;
+	
+	NSURL *baseURL;
+	
+	// private
+	NSURL *lastActionLink;
+	NSMutableSet *mediaPlayers;
+}
+
 
 #pragma mark NSObject
 
-- (id)init {
-	if ((self = [super init])) {
-		NSArray *items = [[NSArray alloc] initWithObjects:@"View", @"Ranges", @"Chars", @"HTML", nil];
-		_segmentedControl = [[UISegmentedControl alloc] initWithItems:items];
+- (id)init
+{
+	self = [super init];
+	if (self)
+	{
+		NSMutableArray *items = [[NSMutableArray alloc] initWithObjects:@"View", @"Ranges", @"Chars", @"HTML", nil];
 		
+		if (![DTVersion osVersionIsLessThen:@"6.0"])
+		{
+			[items addObject:@"iOS 6"];
+		}
+		
+		_segmentedControl = [[UISegmentedControl alloc] initWithItems:items];
 		_segmentedControl.segmentedControlStyle = UISegmentedControlStyleBar;
 		_segmentedControl.selectedSegmentIndex = 0;
 		[_segmentedControl addTarget:self action:@selector(_segmentedControlChanged:) forControlEvents:UIControlEventValueChanged];
 		self.navigationItem.titleView = _segmentedControl;	
 		
-		// toolbar
-#if 0 // DTWebArchive moved to separate project late 2011
-		UIBarButtonItem *spacer = [[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace target:nil action:nil] autorelease];
-		UIBarButtonItem *paste = [[[UIBarButtonItem alloc] initWithTitle:@"Paste" style:UIBarButtonItemStyleBordered target:self action:@selector(paste:)] autorelease];
-		UIBarButtonItem *copy = [[[UIBarButtonItem alloc] initWithTitle:@"Copy" style:UIBarButtonItemStyleBordered target:self action:@selector(copy:)] autorelease];
-#endif		
 		UIBarButtonItem *debug = [[UIBarButtonItem alloc] initWithTitle:@"Debug Frames" style:UIBarButtonItemStyleBordered target:self action:@selector(debugButton:)];
-		NSArray *toolbarItems = [NSArray arrayWithObjects:/*paste, copy, spacer, */debug, nil];
+		NSArray *toolbarItems = [NSArray arrayWithObject:debug];
 		[self setToolbarItems:toolbarItems];
 	}
 	return self;
@@ -89,15 +110,27 @@
 	// Create text view
 	[DTAttributedTextContentView setLayerClass:[CATiledLayer class]];
 	_textView = [[DTAttributedTextView alloc] initWithFrame:frame];
+	
+	// set an inset. Since the bottom is below a toolbar inset by 44px
+	[_textView setScrollIndicatorInsets:UIEdgeInsetsMake(0, 0, 44, 0)];
+	_textView.contentInset = UIEdgeInsetsMake(10, 10, 54, 10);
+
 	_textView.textDelegate = self;
 	_textView.autoresizingMask = UIViewAutoresizingFlexibleWidth;
 	[self.view addSubview:_textView];
+	
+	// create a text view to for testing iOS 6 compatibility
+	// Create html view
+	_iOS6View = [[UITextView alloc] initWithFrame:frame];
+	_iOS6View.editable = NO;
+	_iOS6View.contentInset = UIEdgeInsetsMake(10, 0, 10, 0);
+	_iOS6View.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+	[self.view addSubview:_iOS6View];
 }
 
 
-- (void)viewDidLoad {
-	[super viewDidLoad];
-	
+- (NSAttributedString *)_attributedStringForSnippetUsingiOS6Attributes:(BOOL)useiOS6Attributes
+{
 	// Load HTML data
 	NSString *readmePath = [[NSBundle mainBundle] pathForResource:_fileName ofType:nil];
 	NSString *html = [NSString stringWithContentsOfFile:readmePath encoding:NSUTF8StringEncoding error:NULL];
@@ -115,28 +148,32 @@
 		}
 	};
 	
-	NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:1.0], NSTextSizeMultiplierDocumentOption, [NSValue valueWithCGSize:maxImageSize], DTMaxImageSize,
-													 @"Times New Roman", DTDefaultFontFamily,  @"purple", DTDefaultLinkColor, callBackBlock, DTWillFlushBlockCallBack, nil]; 
+	NSMutableDictionary *options = [NSMutableDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:1.0], NSTextSizeMultiplierDocumentOption, [NSValue valueWithCGSize:maxImageSize], DTMaxImageSize,
+							 @"Times New Roman", DTDefaultFontFamily,  @"purple", DTDefaultLinkColor, callBackBlock, DTWillFlushBlockCallBack, nil];
+	
+	if (useiOS6Attributes)
+	{
+		[options setObject:[NSNumber numberWithBool:YES] forKey:DTUseiOS6Attributes];
+	}
 	
 	NSAttributedString *string = [[NSAttributedString alloc] initWithHTMLData:data options:options documentAttributes:NULL];
 	
-	// Display string
-	_textView.contentView.edgeInsets = UIEdgeInsetsMake(10, 10, 10, 10);
-	_textView.contentView.shouldDrawLinks = NO; // we draw them in DTLinkButton
-	_textView.attributedString = string;
+	return string;
 }
 
-
-- (void)viewWillAppear:(BOOL)animated 
+- (void)viewWillAppear:(BOOL)animated
 {
 	[super viewWillAppear:animated];
 	
 	CGRect bounds = self.view.bounds;
 	_textView.frame = bounds;
+
+	// Display string
+	_textView.shouldDrawLinks = NO; // we draw them in DTLinkButton
+	_textView.attributedString = [self _attributedStringForSnippetUsingiOS6Attributes:NO];
 	
 	[self _segmentedControlChanged:nil];
-	[_textView setContentInset:UIEdgeInsetsMake(0, 0, 44, 0)];
-	[_textView setScrollIndicatorInsets:UIEdgeInsetsMake(0, 0, 44, 0)];
+	
 	[self.navigationController setToolbarHidden:NO animated:YES];
 }
 
@@ -212,7 +249,13 @@
 			_htmlView.text = [_textView.attributedString htmlString];
 			break;
 		}
-
+		case 4:
+		{
+			if (![_iOS6View.attributedText length])
+			{
+				_iOS6View.attributedText = [self _attributedStringForSnippetUsingiOS6Attributes:YES];
+			}
+		}
 	}
 }
 
@@ -229,6 +272,11 @@
 		case 3:
 		{
 			selectedView = _htmlView;
+			break;
+		}
+		case 4:
+		{
+			selectedView = _iOS6View;
 			break;
 		}
 	}
@@ -478,42 +526,9 @@
 
 - (void)debugButton:(UIBarButtonItem *)sender
 {
-	_textView.contentView.drawDebugFrames = !_textView.contentView.drawDebugFrames;
-	[DTCoreTextLayoutFrame setShouldDrawDebugFrames:_textView.contentView.drawDebugFrames];
-	[self.view setNeedsDisplay];
+	[DTCoreTextLayoutFrame setShouldDrawDebugFrames:![DTCoreTextLayoutFrame shouldDrawDebugFrames]];
+	[_textView.attributedTextContentView setNeedsDisplay];
 }
-
-#if 0 // DTWebArchive split out late 2011
-- (void)paste:(id)sender
-{
-	UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
-	
-	DTWebArchive *webArchive = [pasteboard webArchive];
-	
-	if (webArchive)
-	{
-		CGSize maxImageSize = CGSizeMake(self.view.bounds.size.width - 20.0, self.view.bounds.size.height - 20.0);
-		
-		NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithFloat:1.0], NSTextSizeMultiplierDocumentOption, [NSValue valueWithCGSize:maxImageSize], DTMaxImageSize,
-								 @"Times New Roman", DTDefaultFontFamily,  @"purple", DTDefaultLinkColor, baseURL, NSBaseURLDocumentOption, nil];
-		
-		NSAttributedString *attrString = [[[NSAttributedString alloc] initWithWebArchive:webArchive options:options documentAttributes:NULL] autorelease];
-		
-		_textView.attributedString = attrString;
-	}
-}
-
-- (void)copy:(id)sender
-{
-	UIPasteboard *pasteboard = [UIPasteboard generalPasteboard];
-	
-	// web archive contains rich text
-	DTWebArchive *webArchive = [_textView.attributedString webArchive];
-	[pasteboard setWebArchive:webArchive];
-	
-	// PS: in real life you also want to put put a plain text copy in pasteboard for apps that don't take rich text
-}
-#endif
 
 #pragma mark DTLazyImageViewDelegate
 
@@ -524,7 +539,7 @@
 	NSPredicate *pred = [NSPredicate predicateWithFormat:@"contentURL == %@", url];
 	
 	// update all attachments that matchin this URL (possibly multiple images with same size)
-	for (DTTextAttachment *oneAttachment in [_textView.contentView.layoutFrame textAttachmentsWithPredicate:pred])
+	for (DTTextAttachment *oneAttachment in [_textView.attributedTextContentView.layoutFrame textAttachmentsWithPredicate:pred])
 	{
 		oneAttachment.originalSize = imageSize;
 		
@@ -536,7 +551,7 @@
 	
 	// redo layout
 	// here we're layouting the entire string, might be more efficient to only relayout the paragraphs that contain these attachments
-	[_textView.contentView relayoutText];
+	[_textView.attributedTextContentView relayoutText];
 }
 
 #pragma mark Properties
