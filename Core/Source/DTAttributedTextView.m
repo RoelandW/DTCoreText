@@ -1,6 +1,6 @@
 //
 //  DTAttributedTextView.m
-//  CoreTextExtensions
+//  DTCoreText
 //
 //  Created by Oliver Drobnik on 1/12/11.
 //  Copyright 2011 Drobnik.com. All rights reserved.
@@ -12,7 +12,7 @@
 
 @interface DTAttributedTextView ()
 
-- (void)setup;
+- (void)_setup;
 
 @end
 
@@ -20,13 +20,14 @@
 
 @implementation DTAttributedTextView
 {
-	DTAttributedTextContentView *_attributedTextContentView;
 	UIView *_backgroundView;
 
 	// these are pass-through, i.e. store until the content view is created
 	__unsafe_unretained id textDelegate;
 	NSAttributedString *_attributedString;
+	
 	BOOL _shouldDrawLinks;
+	BOOL _shouldDrawImages;
 }
 
 - (id)initWithFrame:(CGRect)frame
@@ -35,7 +36,7 @@
 	
 	if (self)
 	{
-		[self setup];
+		[self _setup];
 	}
 	
 	return self;
@@ -43,15 +44,14 @@
 
 - (void)dealloc 
 {
-	_attributedTextContentView.delegate = nil;
-	[_attributedTextContentView removeObserver:self forKeyPath:@"frame"];
+	[[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
 - (void)layoutSubviews
 {
 	[super layoutSubviews];
 	
-	[self contentView];
+	[self attributedTextContentView];
 	
 	// layout custom subviews for visible area
 	[_attributedTextContentView layoutSubviewsInRect:self.bounds];
@@ -59,32 +59,37 @@
 
 - (void)awakeFromNib
 {
-	[self setup];
+	[self _setup];
 }
 
 // default
-- (void)setup
+- (void)_setup
 {
-	if (!self.backgroundColor)
+	if (self.backgroundColor)
+	{
+		CGFloat alpha = [self.backgroundColor alphaComponent];
+		
+		if (alpha < 1.0)
+		{
+			self.opaque = NO;
+		}
+		else
+		{
+			self.opaque = YES;
+		}
+	}
+	else
 	{
 		self.backgroundColor = [DTColor whiteColor];
-		self.opaque = YES;
-		return;
-	}
-	
-	CGFloat alpha = [self.backgroundColor alphaComponent];
-	
-	if (alpha < 1.0)
-	{
-		self.opaque = NO;
-	}
-	else 
-	{
 		self.opaque = YES;
 	}
 	
 	self.autoresizesSubviews = NO;
 	self.clipsToBounds = YES;
+	
+	// defaults
+	_shouldDrawLinks = YES;
+	_shouldDrawImages = YES;
 }
 
 // override class e.g. for mutable content view
@@ -96,34 +101,63 @@
 #pragma mark External Methods
 - (void)scrollToAnchorNamed:(NSString *)anchorName animated:(BOOL)animated
 {
-	NSRange range = [self.contentView.attributedString rangeOfAnchorNamed:anchorName];
+	NSRange range = [self.attributedTextContentView.attributedString rangeOfAnchorNamed:anchorName];
 	
 	if (range.length != NSNotFound)
 	{
-		// get the line of the first index of the anchor range
-		DTCoreTextLayoutLine *line = [self.contentView.layoutFrame lineContainingIndex:range.location];
-		
-		// make sure we don't scroll too far
-		CGFloat maxScrollPos = self.contentSize.height - self.bounds.size.height + self.contentInset.bottom + self.contentInset.top;
-		CGFloat scrollPos = MIN(line.frame.origin.y, maxScrollPos);
-		
-		// scroll
-		[self setContentOffset:CGPointMake(0, scrollPos) animated:animated];
+		[self scrollRangeToVisible:range animated:animated];
 	}
 }
 
-#pragma mark Notifications
-- (void)observeValueForKeyPath:(NSString *)keyPath ofObject:(id)object change:(NSDictionary *)change context:(void *)context
+- (void)scrollRangeToVisible:(NSRange)range animated:(BOOL)animated
 {
-	if (object == _attributedTextContentView && [keyPath isEqualToString:@"frame"])
+	// get the line of the first index of the anchor range
+	DTCoreTextLayoutLine *line = [self.attributedTextContentView.layoutFrame lineContainingIndex:range.location];
+	
+	// make sure we don't scroll too far
+	CGFloat maxScrollPos = self.contentSize.height - self.bounds.size.height + self.contentInset.bottom + self.contentInset.top;
+	CGFloat scrollPos = MIN(line.frame.origin.y, maxScrollPos);
+	
+	// scroll
+	[self setContentOffset:CGPointMake(0, scrollPos) animated:animated];
+}
+
+- (void)relayoutText
+{
+	// need to reset the layouter because otherwise we get the old framesetter or cached layout frames
+	_attributedTextContentView.layouter=nil;
+	
+	// here we're layouting the entire string, might be more efficient to only relayout the paragraphs that contain these attachments
+	[_attributedTextContentView relayoutText];
+	
+	// layout custom subviews for visible area
+	[self setNeedsLayout];
+}
+
+#pragma mark Notifications
+- (void)contentViewDidLayout:(NSNotification *)notification
+{
+	if (![NSThread mainThread])
 	{
-		CGRect newFrame = [[change objectForKey:NSKeyValueChangeNewKey] CGRectValue];
-		self.contentSize = newFrame.size;
+		[self performSelectorOnMainThread:@selector(contentViewDidLayout:) withObject:notification waitUntilDone:YES];
+		return;
+	}
+	
+	NSDictionary *userInfo = [notification userInfo];
+	CGRect optimalFrame = [[userInfo objectForKey:@"OptimalFrame"] CGRectValue];
+	
+	CGRect frame = UIEdgeInsetsInsetRect(self.bounds, self.contentInset);
+	
+	// ignore possibly delayed layout notification for a different width
+	if (optimalFrame.size.width == frame.size.width)
+	{
+		_attributedTextContentView.frame = optimalFrame;
+		self.contentSize = [_attributedTextContentView intrinsicContentSize];
 	}
 }
 
 #pragma mark Properties
-- (DTAttributedTextContentView *)contentView
+- (DTAttributedTextContentView *)attributedTextContentView
 {
 	if (!_attributedTextContentView)
 	{
@@ -131,6 +165,12 @@
 		Class classToUse = [self classForContentView];
 		
 		CGRect frame = UIEdgeInsetsInsetRect(self.bounds, self.contentInset);
+		
+		if (frame.size.width<=0 || frame.size.height<=0)
+		{
+			frame = CGRectZero;
+		}
+		
 		_attributedTextContentView = [[classToUse alloc] initWithFrame:frame];
 		
 		_attributedTextContentView.userInteractionEnabled = YES;
@@ -155,17 +195,16 @@
 		// pass on setting
 		_attributedTextContentView.shouldDrawLinks = _shouldDrawLinks;
 		
-		// set text we previously got
-		_attributedTextContentView.attributedString = _attributedString;
-		
-		CGSize neededSize = [_attributedTextContentView sizeThatFits:CGSizeZero];
-		frame.size = neededSize;
+		// notification that tells us about the actual size of the content view
+		[[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(contentViewDidLayout:) name:DTAttributedTextContentViewDidFinishLayoutNotification object:_attributedTextContentView];
+
+		// temporary frame to specify the width
 		_attributedTextContentView.frame = frame;
 		
-		self.contentSize = neededSize;
-		
-		// we want to know if the frame changes so that we can adjust the scrollview content size
-		[_attributedTextContentView addObserver:self forKeyPath:@"frame" options:NSKeyValueObservingOptionNew context:nil];
+		// set text we previously got, this also triggers a relayout
+		_attributedTextContentView.attributedString = _attributedString;
+
+		// this causes a relayout and the resulting notification will allow us to set the final frame
 		
 		[self addSubview:_attributedTextContentView];
 	}		
@@ -192,6 +231,19 @@
 	}
 }
 
+- (void)setContentInset:(UIEdgeInsets)contentInset
+{
+	if (!UIEdgeInsetsEqualToEdgeInsets(self.contentInset, contentInset))
+	{
+		[super setContentInset:contentInset];
+		
+		// height does not matter, that will be determined anyhow
+		CGRect contentFrame = CGRectMake(0, 0, self.frame.size.width - self.contentInset.left - self.contentInset.right, _attributedTextContentView.frame.size.height);
+		
+		_attributedTextContentView.frame = contentFrame;
+	}
+}
+
 - (UIView *)backgroundView
 {
 	if (!_backgroundView)
@@ -202,7 +254,7 @@
 		// default is no interaction because background should have no interaction
 		_backgroundView.userInteractionEnabled = NO;
 
-		[self insertSubview:_backgroundView belowSubview:self.contentView];
+		[self insertSubview:_backgroundView belowSubview:self.attributedTextContentView];
 		
 		// make content transparent so that we see the background
 		_attributedTextContentView.backgroundColor = [DTColor clearColor];
@@ -253,9 +305,8 @@
 	{
 		// pass it along if contentView already exists
 		_attributedTextContentView.attributedString = string;
-	
-		// adjust content size right away
-		self.contentSize = _attributedTextContentView.frame.size;
+		
+		// this causes a relayout and the resulting notification will allow us to set the frame and contentSize
 	}
 }
 
@@ -266,16 +317,19 @@
 
 - (void)setFrame:(CGRect)frame
 {
-	if (!CGRectEqualToRect(self.frame, frame))
+	CGRect oldFrame = self.frame;
+	
+	if (!CGRectEqualToRect(oldFrame, frame))
 	{
-		if (self.frame.size.width != frame.size.width)
+		[super setFrame:frame]; // need to set own frame first because layout completion needs this updated frame
+		
+		if (oldFrame.size.width != frame.size.width)
 		{
 			// height does not matter, that will be determined anyhow
-			CGRect contentFrame = CGRectMake(0, 0, frame.size.width - self.contentInset.left - self.contentInset.right, 0);
+			CGRect contentFrame = CGRectMake(0, 0, frame.size.width - self.contentInset.left - self.contentInset.right, _attributedTextContentView.frame.size.height);
 			
 			_attributedTextContentView.frame = contentFrame;
 		}
-		[super setFrame:frame];
 	}
 }
 
@@ -296,7 +350,13 @@
 - (void)setShouldDrawLinks:(BOOL)shouldDrawLinks
 {
 	_shouldDrawLinks = shouldDrawLinks;
-	_attributedTextContentView.shouldDrawLinks = YES;
+	_attributedTextContentView.shouldDrawLinks = _shouldDrawLinks;
+}
+
+- (void)setShouldDrawImages:(BOOL)shouldDrawImages
+{
+	_shouldDrawImages = shouldDrawImages;
+	_attributedTextContentView.shouldDrawImages = _shouldDrawImages;
 }
 
 @synthesize attributedTextContentView = _attributedTextContentView;

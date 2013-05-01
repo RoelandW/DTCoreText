@@ -23,7 +23,7 @@ CTLineTruncationType DTCTLineTruncationTypeFromNSLineBreakMode(NSLineBreakMode l
 		case UILineBreakModeHeadTruncation:
 			return kCTLineTruncationStart;
 			
-		case UILineBreakModeTailTruncation:
+		case UILineBreakModeMiddleTruncation:
 			return kCTLineTruncationMiddle;
 			
 		default:
@@ -43,3 +43,20 @@ CTLineTruncationType DTCTLineTruncationTypeFromNSLineBreakMode(NSLineBreakMode l
 	}
 #endif
 }
+
+CGFloat DTRoundWithContentScale(CGFloat value, CGFloat contentScale)
+{
+	return roundf(value*contentScale)/contentScale;
+}
+
+CGFloat DTCeilWithContentScale(CGFloat value, CGFloat contentScale)
+{
+	return ceilf(value*contentScale)/contentScale;
+}
+
+CGFloat DTFloorWithContentScale(CGFloat value, CGFloat contentScale)
+{
+	return floorf(value*contentScale)/contentScale;
+}
+
+
